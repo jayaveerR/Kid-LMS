@@ -28,6 +28,18 @@ interface Question {
   maxMarks: number;
 }
 
+interface Exam {
+  id: string;
+  title: string;
+  subject: string;
+}
+
+interface EvaluationDetail {
+  question_num: number;
+  score: number;
+  evaluation_feedback: string;
+}
+
 export default function AdminModelAnswers() {
   const [selectedExamId, setSelectedExamId] = useState<string>('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -41,7 +53,7 @@ export default function AdminModelAnswers() {
   });
 
   // Fetch all exams for the dropdown
-  const { data: exams = [], isLoading: examsLoading } = useQuery({
+  const { data: exams = [] as Exam[], isLoading: examsLoading } = useQuery({
     queryKey: ['exams'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/exams`);
@@ -66,7 +78,7 @@ export default function AdminModelAnswers() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (q: any) => {
+    mutationFn: async (q: Omit<Question, 'id'>) => {
       const res = await fetch(`${API_BASE_URL}/api/exams/${selectedExamId}/questions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,7 +212,7 @@ export default function AdminModelAnswers() {
       toast.loading('Running Semantic Evaluation...', { id: 'eval-json' });
 
       // Transform JSON to match expected extracted_data format
-      const extracted_data = studentData.qa.map((item: any, idx: number) => {
+      const extracted_data = studentData.qa.map((item: { question: string; answer: string }, idx: number) => {
         const questionObj = questions.find(q => q.q === (idx + 1)) || questions[idx];
         return {
           question_id: questionObj?.id || String(idx + 1),
@@ -230,10 +242,11 @@ export default function AdminModelAnswers() {
       });
       // Small visual breakdown in console
       console.log('--- EVALUATION DETAILS ---');
-      result.details?.forEach((d: any) => console.log(`Q${d.question_num} [${d.score} marks]: ${d.evaluation_feedback}`));
+      result.details?.forEach((d: EvaluationDetail) => console.log(`Q${d.question_num} [${d.score} marks]: ${d.evaluation_feedback}`));
       
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to evaluate JSON', { id: 'eval-json' });
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || 'Failed to evaluate JSON', { id: 'eval-json' });
     }
   };
 
@@ -362,7 +375,7 @@ export default function AdminModelAnswers() {
                 <SelectValue placeholder={examsLoading ? "Loading exams..." : "Choose an examination"} />
               </SelectTrigger>
               <SelectContent>
-                {exams.map((e: any) => (
+                {exams.map((e: Exam) => (
                   <SelectItem key={e.id} value={String(e.id)}>{e.title} ({e.subject})</SelectItem>
                 ))}
               </SelectContent>
