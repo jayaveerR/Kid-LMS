@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.vite
+venv
+__pycache__
+*.pyc
+serviceAccountKey.json
+.DS_Store
+.antigravityignore
