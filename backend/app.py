@@ -1,5 +1,6 @@
 
 import os
+import json
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -19,12 +20,22 @@ cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
 firebase_initialized = False
 
 try:
-    if cred_path and os.path.exists(cred_path):
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-        firebase_initialized = True
+    if cred_path:
+        if os.path.exists(cred_path):
+            # 1. Use the file path as before
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+            firebase_initialized = True
+        elif cred_path.strip().startswith("{") and cred_path.strip().endswith("}"):
+            # 2. Treat as a raw JSON string (cloud/env secret)
+            cred_dict = json.loads(cred_path)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            firebase_initialized = True
+        else:
+            print(f"ERROR: Specified path '{cred_path}' not found and doesn't look like JSON.")
     else:
-        # Try default credentials (ADC)
+        # 3. Default (ADC)
         firebase_admin.initialize_app()
         firebase_initialized = True
 except Exception as e:
