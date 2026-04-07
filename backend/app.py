@@ -13,8 +13,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev_secret")
-# Broad CORS policy to allow Vercel and local development
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+# Robust CORS policy for both local and live deployments
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=False)
 
 # Firebase Admin SDK Initialization
 cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
@@ -27,12 +27,21 @@ try:
             cred = credentials.Certificate(cred_path)
             firebase_admin.initialize_app(cred)
             firebase_initialized = True
-        elif cred_path.strip().startswith("{") and cred_path.strip().endswith("}"):
+        elif cred_path.strip().startswith("{") or (cred_path.strip().startswith('"') and cred_path.strip().endswith('"')):
             # 2. Treat as a raw JSON string (cloud/env secret)
-            cred_dict = json.loads(cred_path)
-            cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred)
-            firebase_initialized = True
+            cleaned_json = cred_path.strip()
+            # If the user accidentally put quotes around the whole blob in Render
+            if cleaned_json.startswith('"') and cleaned_json.endswith('"'):
+                cleaned_json = json.loads(cleaned_json) # Unwrap one layer
+            
+            cred_dict = json.loads(cleaned_json) if isinstance(cleaned_json, str) else cleaned_json
+            
+            if isinstance(cred_dict, dict):
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+                firebase_initialized = True
+            else:
+                print("ERROR: Parsed JSON is not a dictionary.")
         else:
             print(f"ERROR: Specified path '{cred_path}' not found and doesn't look like JSON.")
     else:

@@ -9,19 +9,51 @@ import { Upload as UploadIcon, FileUp, X, Loader2, CheckCircle2, ChevronRight, S
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/constants';
 
+interface Exam {
+  id: string;
+  title: string;
+  subject: string;
+}
+
+interface StudentDetails {
+  id: string;
+  fullName: string;
+  email: string;
+  rollNumber: string;
+}
+
+interface EvaluationDetail {
+  question_num: number;
+  student_question: string;
+  student_answer: string;
+  instructor_answer: string;
+  evaluation_feedback: string;
+  score: number;
+  semantic_match_percentage: number;
+}
+
+interface EvaluationResult {
+  roll_number: string;
+  score: number;
+  total: number;
+  percentage: string;
+  grade: string;
+  details: EvaluationDetail[];
+}
+
 export default function UploadPapers() {
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0); // 0: Idle, 1: Uploading, 2: OCR, 3: Evaluating
-  const [exams, setExams] = useState<any[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExam, setSelectedExam] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [extractedData, setExtractedData] = useState<any[] | null>(null);
   const [showJson, setShowJson] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [studentDetails, setStudentDetails] = useState<any>(null);
+  const [result, setResult] = useState<EvaluationResult | null>(null);
+  const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
   const [searchingStudent, setSearchingStudent] = useState(false);
   const [recording, setRecording] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,7 +63,7 @@ export default function UploadPapers() {
       try {
         const res = await fetch(`${API_BASE_URL}/api/exams`);
         const data = await res.json();
-        setExams(data);
+        setExams(data as Exam[]);
       } catch (err) {
         console.error('Failed to fetch exams', err);
       }
@@ -239,7 +271,7 @@ export default function UploadPapers() {
                 </div>
                 
                 <div className="space-y-6">
-                  {result.details && result.details.map((d: any, i: number) => (
+                  {result.details && result.details.map((d: EvaluationDetail, i: number) => (
                     <div key={i} className="rounded-2xl border-2 border-border bg-card overflow-hidden shadow-sm hover:border-primary/40 transition-all">
                       <div className="bg-secondary/30 px-6 py-3 flex items-center justify-between border-b border-border">
                         <div className="flex items-center gap-3">
@@ -350,28 +382,60 @@ export default function UploadPapers() {
             </motion.div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Exam</Label>
-              <Select onValueChange={setSelectedExam} value={selectedExam} disabled={!!extractedData}>
-                <SelectTrigger className="h-11 shadow-sm"><SelectValue placeholder="Target Quiz/Exam" /></SelectTrigger>
-                <SelectContent>
-                  {exams.map(e => (
-                    <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
+            <h2 className="mb-6 font-bold text-foreground flex items-center gap-2">
+              <ScanSearch className="h-5 w-5 text-primary" />
+              1. Configuration & Target Assignment
+            </h2>
+            
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1 block">Target Quiz/Exam</Label>
+                <Select value={selectedExam} onValueChange={setSelectedExam}>
+                  <SelectTrigger className="h-12 bg-white border-primary/20 focus:ring-primary shadow-sm">
+                    <SelectValue placeholder="Choose an examination" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {exams.map((e) => (
+                      <SelectItem key={e.id} value={String(e.id)}>{e.title} ({e.subject})</SelectItem>
+                    ))}
+                    {exams.length === 0 && <p className="p-2 text-xs text-muted-foreground text-center">No exams found.</p>}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1 block">Student UUID (Optional)</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="Enter Student UUID..." 
+                    className="h-12 font-mono text-xs bg-white border-primary/20"
+                    value={rollNumber}
+                    onChange={(e) => setRollNumber(e.target.value)}
+                  />
+                  <Button variant="secondary" onClick={handleLookupStudent} disabled={searchingStudent || !rollNumber} className="h-12 border border-primary/10">
+                    {searchingStudent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Roll Number</Label>
-              <Input 
-                placeholder="e.g. STU-990" 
-                className="h-11 shadow-sm" 
-                value={rollNumber} 
-                onChange={(e) => setRollNumber(e.target.value)} 
-                disabled={!!extractedData}
-              />
-            </div>
+
+            {studentDetails && (
+              <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="mt-6 flex items-center justify-between p-4 rounded-xl bg-primary/5 border border-primary/20">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">
+                    {studentDetails.fullName?.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase text-primary leading-none mb-1">Target Student</p>
+                    <p className="text-sm font-bold text-foreground">{studentDetails.fullName}</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => { setStudentDetails(null); setRollNumber(''); }} className="text-destructive h-8 w-8 p-0">
+                  <X className="h-4 w-4" />
+                </Button>
+              </motion.div>
+            )}
           </div>
 
           <AnimatePresence>
