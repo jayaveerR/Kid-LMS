@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload as UploadIcon, FileUp, X, Loader2, CheckCircle2, ChevronRight, ScanSearch, Cpu, Scale, PenTool, Printer, Eye, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/constants';
 
 export default function UploadPapers() {
   const [files, setFiles] = useState<File[]>([]);
@@ -28,7 +29,7 @@ export default function UploadPapers() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('http://localhost:5000/api/exams');
+        const res = await fetch(`${API_BASE_URL}/api/exams`);
         const data = await res.json();
         setExams(data);
       } catch (err) {
@@ -45,7 +46,7 @@ export default function UploadPapers() {
     }
     setSearchingStudent(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${rollNumber}`);
+      const response = await fetch(`${API_BASE_URL}/api/users/${rollNumber}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Student not found');
       setStudentDetails(data);
@@ -80,7 +81,7 @@ export default function UploadPapers() {
       formData.append('exam_id', selectedExam);
       files.forEach((file) => formData.append('files', file));
 
-      const response = await fetch('http://localhost:5000/api/extract', {
+      const response = await fetch(`${API_BASE_URL}/api/extract`, {
         method: 'POST',
         body: formData
       });
@@ -102,7 +103,7 @@ export default function UploadPapers() {
     if (!extractedData) return;
     setEvaluating(true);
     try {
-      const response = await fetch('http://localhost:5000/api/evaluate-confirm', {
+      const response = await fetch(`${API_BASE_URL}/api/evaluate-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,7 +129,7 @@ export default function UploadPapers() {
     if (!studentDetails || !result) return;
     setRecording(true);
     try {
-      const response = await fetch('http://localhost:5000/api/record-ledger', {
+      const response = await fetch(`${API_BASE_URL}/api/record-ledger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

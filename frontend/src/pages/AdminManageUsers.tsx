@@ -8,6 +8,7 @@ import { UserPlus, Search, Edit, Trash2, Loader2, Shield } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/constants';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +43,7 @@ export default function AdminManageUsers() {
   const handleRoleChange = async (uid: string, newRole: string) => {
     setUpdatingRole(uid);
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${uid}/role`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${uid}/role`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole })

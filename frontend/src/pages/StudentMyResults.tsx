@@ -7,6 +7,7 @@ import { Trophy, BarChart3, Award, Search, Eye, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { auth } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/constants';
 
 export default function StudentMyResults() {
   const [search, setSearch] = useState('');
@@ -22,7 +23,7 @@ export default function StudentMyResults() {
       }
 
       try {
-        const response = await fetch(`http://localhost:5000/api/students/results/${user.uid}`);
+        const response = await fetch(`${API_BASE_URL}/api/students/results/${user.uid}`);
         if (!response.ok) throw new Error('Failed to fetch results');
         const data = await response.json();
         setResults(data);

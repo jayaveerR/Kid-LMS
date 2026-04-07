@@ -5,6 +5,7 @@ import { BookOpen, Users, FileText, CheckCircle, Loader2, ArrowRight, Upload as 
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
 import { Link } from 'react-router-dom';
+import { API_BASE_URL } from '@/lib/constants';
 
 export default function InstructorDashboard() {
   const [stats, setStats] = useState([
@@ -63,7 +64,7 @@ export default function InstructorDashboard() {
 
     const fetchStudents = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/students/list');
+        const response = await fetch(`${API_BASE_URL}/api/students/list`);
         if (response.ok) {
           const data = await response.json();
           setStudentsList(data.map((s: any) => ({

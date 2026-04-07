@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, Calendar, Clock, FileText, Eye, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/constants';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import {
@@ -72,7 +73,7 @@ export default function AdminManageExams() {
 
     setIsSaving(true);
     try {
-      const response = await fetch('http://localhost:5000/api/exams', {
+      const response = await fetch(`${API_BASE_URL}/api/exams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newExam)

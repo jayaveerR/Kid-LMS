@@ -7,6 +7,7 @@ import { Search, Eye, Play, Loader2, RefreshCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/constants';
 
 interface EvaluationResult {
   id: string;
@@ -25,7 +26,7 @@ export default function AdminAllEvaluations() {
   const { data: results = [], isLoading, isFetching } = useQuery({
     queryKey: ['evaluations'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:5000/api/results');
+      const res = await fetch(`${API_BASE_URL}/api/results`);
       if (!res.ok) throw new Error('Failed to fetch results');
       return res.json() as Promise<EvaluationResult[]>;
     }
@@ -34,7 +35,7 @@ export default function AdminAllEvaluations() {
   const mutation = useMutation({
     mutationFn: async () => {
       // Demo trigger for evaluation
-      const res = await fetch('http://localhost:5000/api/evaluate', {
+      const res = await fetch(`${API_BASE_URL}/api/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ exam_id: 'sample_exam', roll_number: 'DEMO001' })

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, Edit, Trash2, Loader2, Save, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_BASE_URL } from '@/lib/constants';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import {
@@ -66,7 +67,7 @@ export default function AdminManageSubjects() {
 
     setIsSaving(true);
     try {
-      const response = await fetch('http://localhost:5000/api/subjects', {
+      const response = await fetch(`${API_BASE_URL}/api/subjects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSubject)
