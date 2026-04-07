@@ -13,7 +13,8 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev_secret")
-CORS(app, supports_credentials=True)
+# Broad CORS policy to allow Vercel and local development
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # Firebase Admin SDK Initialization
 cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
@@ -96,7 +97,10 @@ def manage_subjects():
 @app.route('/api/exams', methods=['GET', 'POST'])
 def manage_exams():
     if not db:
-        return jsonify({"error": "Firebase Firestore not initialized"}), 500
+        return jsonify({
+            "error": "Firebase Firestore not initialized",
+            "reason": "Missing or invalid service account JSON on Render/Backend environment"
+        }), 500
 
     if request.method == 'GET':
         try:

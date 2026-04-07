@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -53,18 +53,22 @@ export default function AdminModelAnswers() {
   });
 
   // Fetch all exams for the dropdown
-  const { data: exams = [] as Exam[], isLoading: examsLoading } = useQuery({
+  const { data: exams = [] as Exam[], isPending: examsLoading } = useQuery({
     queryKey: ['exams'],
     queryFn: async () => {
       const res = await fetch(`${API_BASE_URL}/api/exams`);
       if (!res.ok) throw new Error('Failed to fetch exams');
       const data = await res.json();
-      if (data.length > 0 && !selectedExamId) {
-        setSelectedExamId(String(data[0].id));
-      }
-      return data;
+      return data as Exam[];
     }
   });
+
+  // Handle initial selection via useEffect side-effect (Clean React Pattern)
+  useEffect(() => {
+    if (exams.length > 0 && !selectedExamId) {
+      setSelectedExamId(String(exams[0].id));
+    }
+  }, [exams, selectedExamId]);
 
   // Fetch questions for the selected exam
   const { data: questions = [], isLoading: questionsLoading } = useQuery({
