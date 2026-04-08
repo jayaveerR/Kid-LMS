@@ -148,6 +148,7 @@ app.get('/api/exams', async (req, res) => {
   try {
     const exams = await Exam.find().sort({ date: -1 });
     const formatted = exams.map(e => ({
+      _id: e._id,
       id: e._id,
       title: e.title,
       subject: e.subject,
@@ -157,6 +158,16 @@ app.get('/api/exams', async (req, res) => {
     res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch exams" });
+  }
+});
+
+app.post('/api/exams', async (req, res) => {
+  try {
+    const newExam = new Exam(req.body);
+    await newExam.save();
+    res.status(201).json({ ...newExam.toObject(), id: newExam._id, _id: newExam._id });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create exam" });
   }
 });
 
