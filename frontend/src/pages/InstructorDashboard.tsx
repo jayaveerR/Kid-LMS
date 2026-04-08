@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import { BookOpen, Users, FileText, CheckCircle, Loader2, ArrowRight, Upload as UploadIcon, ClipboardList } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '@/lib/constants';
 
@@ -15,85 +14,46 @@ export default function InstructorDashboard() {
     { label: 'Evaluated', value: '0', icon: CheckCircle },
   ]);
   const [recentEvals, setRecentEvals] = useState<any[]>([]);
-  const [studentsList, setStudentsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubSubjects = onSnapshot(collection(db, 'subjects'), (snap) => {
-      setStats(prev => [
-        { ...prev[0], value: snap.size.toString() },
-        prev[1], prev[2], prev[3]
-      ]);
-    });
+    async function fetchInstructorData() {
+        try {
+            const statsRes = await fetch(`${API_BASE_URL}/api/stats`);
+            const statsData = await statsRes.json();
+            
+            const resultsRes = await fetch(`${API_BASE_URL}/api/results`);
+            const resultsData = await resultsRes.json();
 
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      const students = snap.docs.filter(d => (d.data().role || 'student').toLowerCase() === 'student').length;
-      setStats(prev => [
-        prev[0],
-        { ...prev[1], value: students.toString() },
-        prev[2], prev[3]
-      ]);
-    });
+            setStats([
+                { label: 'Total Subjects', value: statsData.exams?.toString() || '0', icon: BookOpen },
+                { label: 'Total Students', value: statsData.students?.toString() || '0', icon: Users },
+                { label: 'Total Exams', value: statsData.exams?.toString() || '0', icon: FileText },
+                { label: 'Evaluated', value: statsData.evaluations?.toString() || '0', icon: CheckCircle },
+            ]);
 
-    const unsubExams = onSnapshot(collection(db, 'exams'), (snap) => {
-      setStats(prev => [
-        prev[0], prev[1],
-        { ...prev[2], value: snap.size.toString() },
-        prev[3]
-      ]);
-    });
+            setRecentEvals(resultsData.slice(0, 5).map((d: any) => ({
+                id: d._id,
+                title: `${d.examTitle} - ${d.rollNumber}`,
+                time: new Date(d.timestamp).toLocaleTimeString(),
+                status: 'Completed'
+            })));
 
-    const unsubEvals = onSnapshot(collection(db, 'evaluations'), (snap) => {
-      setStats(prev => [
-        prev[0], prev[1], prev[2],
-        { ...prev[3], value: snap.size.toString() }
-      ]);
-    });
-
-    const qRecent = query(collection(db, 'evaluations'), orderBy('timestamp', 'desc'), limit(5));
-    const unsubRecent = onSnapshot(qRecent, (snap) => {
-      const data = snap.docs.map(doc => ({
-        id: doc.id,
-        title: `${doc.data().exam_id} - ${doc.data().student_roll}`,
-        time: doc.data().timestamp ? new Date(doc.data().timestamp.seconds * 1000).toLocaleTimeString() : 'Recently',
-        status: doc.data().status === 'success' ? 'Completed' : 'Pending'
-      }));
-      setRecentEvals(data);
-      setLoading(false);
-    });
-
-    const fetchStudents = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/students/list`);
-        if (response.ok) {
-          const data = await response.json();
-          setStudentsList(data.map((s: any) => ({
-            id: s.id,
-            name: s.fullName || s.email?.split('@')[0] || 'Student',
-            email: s.email
-          })));
+        } catch (err) {
+            console.error("Failed to load instructor dashboard:", err);
+        } finally {
+            setLoading(false);
         }
-      } catch (err) {
-        console.error("Dashboard student list error:", err);
-      }
-    };
-
-    fetchStudents();
-
-    return () => {
-      unsubSubjects();
-      unsubUsers();
-      unsubExams();
-      unsubEvals();
-      unsubRecent();
-    };
+    }
+    fetchInstructorData();
   }, []);
 
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex h-[80vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse font-bold">Initializing Instructor Portal...</p>
         </div>
       </DashboardLayout>
     );
@@ -101,133 +61,111 @@ export default function InstructorDashboard() {
 
   return (
     <DashboardLayout>
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Instructor Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Manage your assigned subjects and student evaluations</p>
+      <div className="space-y-8 pb-10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-3xl border border-border">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-950">Instructor Console</h1>
+            <p className="text-muted-foreground mt-1 text-sm font-medium">Manage your courses, assessments and student evaluations.</p>
+          </div>
+          <div className="flex items-center gap-3">
+             <Link to="/upload">
+                <Button className="bg-zinc-950 hover:bg-zinc-800 text-white rounded-2xl h-12 px-6">
+                  <UploadIcon className="mr-2 h-4.5 w-4.5" /> Start New Evaluation
+                </Button>
+             </Link>
+          </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-xl border border-border bg-card p-5 hover:border-primary/50 transition-colors cursor-default">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 mb-3">
-                <s.icon className="h-5 w-5 text-primary" />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className="group rounded-3xl border border-border bg-white p-6 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/5 transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 transition-colors group-hover:bg-primary/10">
+                  <stat.icon className="h-6 w-6 text-zinc-950 transition-colors group-hover:text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                  <h3 className="text-2xl font-bold tracking-tight text-zinc-950 tabular-nums">{stat.value}</h3>
+                </div>
               </div>
-              <p className="text-2xl font-bold font-mono text-foreground">{s.value}</p>
-              <p className="text-sm text-muted-foreground">{s.label}</p>
-            </div>
+            </motion.div>
           ))}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Recent Activity */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="border-b border-border px-5 py-4 flex justify-between items-center bg-secondary/20">
-              <h2 className="font-semibold text-foreground">Recent Evaluations</h2>
-              <Link to="/all-evaluations" className="text-xs text-primary hover:underline flex items-center">
-                View all <ArrowRight className="ml-1 h-3 w-3" />
-              </Link>
-            </div>
-            <div className="divide-y divide-border">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            <h3 className="text-xl font-bold text-zinc-950 px-2 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-blue-600" />
+                Recent Activity
+            </h3>
+            <div className="grid gap-4">
               {recentEvals.length === 0 ? (
-                <p className="px-5 py-10 text-center text-muted-foreground">No recent activity.</p>
+                <div className="py-20 text-center border-2 border-dashed border-zinc-100 rounded-3xl bg-zinc-50/50">
+                    No recent evaluations found.
+                </div>
               ) : (
-                recentEvals.map((activity) => (
-                  <div key={activity.id} className="flex items-center justify-between px-5 py-4 hover:bg-secondary/10 transition-colors">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{activity.title}</p>
-                      <p className="text-xs text-muted-foreground">Evaluation • {activity.time}</p>
+                recentEvals.map((evaluation) => (
+                  <div key={evaluation.id} className="group bg-white flex items-center justify-between rounded-2xl border border-zinc-100 p-5 transition-all hover:bg-zinc-50">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-zinc-950 flex items-center justify-center">
+                        <CheckCircle className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-zinc-950">{evaluation.title}</p>
+                        <p className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 mt-1">{evaluation.time}</p>
+                      </div>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                      activity.status === 'Completed' ? 'bg-success/10 text-success' :
-                      'bg-warning/10 text-warning'
-                    }`}>
-                      {activity.status}
-                    </span>
+                    <Link to={`/all-evaluations`} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="sm" className="rounded-xl h-9 font-bold bg-zinc-100">
+                        View Report <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="rounded-xl border border-border bg-card p-6">
-            <h2 className="font-semibold text-foreground mb-4">Quick Actions</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Link 
-                to="/manage-exams" 
-                className="flex flex-col items-center justify-center rounded-xl bg-secondary p-6 transition-all hover:bg-primary/10 group"
-              >
-                <FileText className="h-8 w-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-semibold">Exams</span>
-              </Link>
-              <Link 
-                to="/model-answers" 
-                className="flex flex-col items-center justify-center rounded-xl bg-secondary p-6 transition-all hover:bg-primary/10 group"
-              >
-                <ClipboardList className="h-8 w-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-semibold">Answer Keys</span>
-              </Link>
-              <Link 
-                to="/instructor-students" 
-                className="flex flex-col items-center justify-center rounded-xl bg-secondary p-6 transition-all hover:bg-primary/10 group"
-              >
-                <Users className="h-8 w-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-semibold">Students</span>
-              </Link>
-              <Link 
-                to="/upload" 
-                className="flex flex-col items-center justify-center rounded-xl bg-secondary p-6 transition-all hover:bg-primary/10 group"
-              >
-                <UploadIcon className="h-8 w-8 text-primary mb-3 group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-semibold">Upload Papers</span>
-              </Link>
-            </div>
+          <div className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm">
+             <h3 className="text-xl font-bold mb-6">Quick Links</h3>
+             <div className="space-y-3">
+               <Link to="/manage-exams" className="block w-full p-4 rounded-2xl bg-zinc-50 hover:bg-zinc-100 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-5 h-5 text-zinc-400 group-hover:text-blue-600" />
+                    <div>
+                      <p className="text-sm font-bold">Manage Exams</p>
+                      <p className="text-[10px] text-zinc-400 font-medium">Create and edit papers</p>
+                    </div>
+                  </div>
+               </Link>
+               <Link to="/manage-subjects" className="block w-full p-4 rounded-2xl bg-zinc-50 hover:bg-zinc-100 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="w-5 h-5 text-zinc-400 group-hover:text-amber-500" />
+                    <div>
+                      <p className="text-sm font-bold">Course Catalog</p>
+                      <p className="text-[10px] text-zinc-400 font-medium">Update subject details</p>
+                    </div>
+                  </div>
+               </Link>
+               <Link to="/instructor-students" className="block w-full p-4 rounded-2xl bg-zinc-50 hover:bg-zinc-100 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-zinc-400 group-hover:text-purple-600" />
+                    <div>
+                      <p className="text-sm font-bold">Student Roster</p>
+                      <p className="text-[10px] text-zinc-400 font-medium">View enrollment list</p>
+                    </div>
+                  </div>
+               </Link>
+             </div>
           </div>
         </div>
-
-        {/* Student Directory */}
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="border-b border-border px-6 py-4 bg-secondary/20 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-foreground">Student Directory</h2>
-              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Active Enrolled Students</p>
-            </div>
-            <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold leading-none">
-              {studentsList.length} Students
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-secondary/50 border-b border-border">
-                  <th className="px-6 py-3 text-left font-bold text-muted-foreground uppercase text-[10px]">Name</th>
-                  <th className="px-6 py-3 text-left font-bold text-muted-foreground uppercase text-[10px]">Email</th>
-                  <th className="px-6 py-3 text-left font-bold text-muted-foreground uppercase text-[10px] bg-primary/5">UUID / Roll Number</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {studentsList.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-10 text-center text-muted-foreground italic">No students registered yet.</td>
-                  </tr>
-                ) : (
-                  studentsList.map((s) => (
-                    <tr key={s.id} className="hover:bg-secondary/20 transition-colors group">
-                      <td className="px-6 py-4 font-bold text-foreground">{s.name}</td>
-                      <td className="px-6 py-4 text-muted-foreground">{s.email}</td>
-                      <td className="px-6 py-4 font-mono text-xs font-bold text-primary bg-primary/5 group-hover:bg-primary/10 transition-colors">
-                        {s.id}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </motion.div>
+      </div>
     </DashboardLayout>
   );
 }

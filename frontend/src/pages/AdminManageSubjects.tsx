@@ -3,11 +3,9 @@ import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, Edit, Trash2, Loader2, Save, BookOpen } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Loader2, Save, BookOpen, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/constants';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +18,7 @@ import {
 import { Label } from '@/components/ui/label';
 
 interface Subject {
-  id: string;
+  _id: string;
   code: string;
   name: string;
   description: string;
@@ -39,32 +37,24 @@ export default function AdminManageSubjects() {
     description: ''
   });
 
-  // Real-time synchronization with Firestore "subjects" collection
-  useEffect(() => {
-    const q = query(collection(db, 'subjects'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const subjectsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Subject[];
-      setSubjects(subjectsData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Firestore Listen Error:", error);
-      toast.error("Failed to sync subject data");
-      setLoading(false);
-    });
+  const fetchSubjects = async () => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/subjects`);
+        const data = await response.json();
+        setSubjects(data);
+    } catch (err) {
+        toast.error("Failed to load subjects");
+    } finally {
+        setLoading(false);
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchSubjects();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSaveSubject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSubject.code || !newSubject.name) {
-      toast.error('Subject code and name are required');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/subjects`, {
@@ -73,94 +63,64 @@ export default function AdminManageSubjects() {
         body: JSON.stringify(newSubject)
       });
 
-      if (!response.ok) throw new Error('Failed to create subject');
-      
-      toast.success('Subject added and synced to Firestore');
+      if (!response.ok) throw new Error('Failed to save subject');
+
+      toast.success('Subject created successfully in MongoDB Atlas');
       setIsDialogOpen(false);
       setNewSubject({ code: '', name: '', description: '' });
-    } catch (err) {
-      toast.error('Error saving subject to database');
-      console.error(err);
+      fetchSubjects();
+
+    } catch (error) {
+      toast.error('Failed to create subject');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const filtered = subjects.filter(s =>
-    s.name?.toLowerCase().includes(search.toLowerCase()) ||
-    s.code?.toLowerCase().includes(search.toLowerCase())
+  const filteredSubjects = subjects.filter(s => 
+    s.name.toLowerCase().includes(search.toLowerCase()) || 
+    s.code.toLowerCase().includes(search.toLowerCase())
   );
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-[60vh] items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-sm text-muted-foreground font-medium">Connecting to Subjects Collection...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout>
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="space-y-8 pb-10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-3xl border border-border shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Manage Subjects</h1>
-            <p className="text-sm text-muted-foreground">Department-wide academic subject directory</p>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-950">Subject Directory</h1>
+            <p className="text-muted-foreground mt-1 text-sm font-medium uppercase tracking-widest bg-zinc-100 w-fit px-2 py-0.5 rounded">Course Catalog</p>
           </div>
           
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 shadow-md">
-                <Plus className="mr-2 h-4 w-4" />
-                Add New Subject
+              <Button className="bg-zinc-950 hover:bg-zinc-800 text-white rounded-2xl h-12 px-6 shadow-lg shadow-zinc-950/10">
+                <Plus className="mr-2 h-4.5 w-4.5" /> Define New Subject
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="max-w-md rounded-3xl">
               <DialogHeader>
-                <DialogTitle>Add Subject to Firestore</DialogTitle>
-                <DialogDescription>
-                  Adding a subject here will trigger real-time updates for all instructors.
-                </DialogDescription>
+                <DialogTitle className="text-2xl font-bold">New Subject</DialogTitle>
+                <DialogDescription>Add a new course or subject to the catalog.</DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleCreate} className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="code">Subject Code</Label>
-                  <Input 
-                    id="code" 
-                    placeholder="e.g. PHY-201" 
-                    value={newSubject.code} 
-                    onChange={e => setNewSubject({...newSubject, code: e.target.value})}
-                    required
-                  />
+              <form onSubmit={handleSaveSubject} className="space-y-5 py-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sname">Subject Name</Label>
+                    <Input id="sname" value={newSubject.name} onChange={e => setNewSubject({...newSubject, name: e.target.value})} placeholder="Machine Learning" required className="rounded-xl h-11" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="scode">Subject Code</Label>
+                    <Input id="scode" value={newSubject.code} onChange={e => setNewSubject({...newSubject, code: e.target.value})} placeholder="CSL-401" className="rounded-xl h-11" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sdesc">Description (Optional)</Label>
+                    <Input id="sdesc" value={newSubject.description} onChange={e => setNewSubject({...newSubject, description: e.target.value})} placeholder="Brief overview of the course content" className="rounded-xl h-11" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Subject Name</Label>
-                  <Input 
-                    id="name" 
-                    placeholder="e.g. Quantum Mechanics" 
-                    value={newSubject.name} 
-                    onChange={e => setNewSubject({...newSubject, name: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Brief Description</Label>
-                  <Input 
-                    id="description" 
-                    placeholder="Optional details about the syllabus" 
-                    value={newSubject.description} 
-                    onChange={e => setNewSubject({...newSubject, description: e.target.value})}
-                  />
-                </div>
-                <DialogFooter className="mt-4">
-                  <Button type="submit" className="w-full" disabled={isSaving}>
-                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Confirm & Store
+                <DialogFooter className="pt-4 gap-3 flex-col sm:flex-row">
+                  <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl h-11 order-2 sm:order-1 font-semibold">Cancel</Button>
+                  <Button type="submit" disabled={isSaving} className="bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl h-11 order-1 sm:order-2 font-bold px-8">
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />} Save Subject
                   </Button>
                 </DialogFooter>
               </form>
@@ -168,54 +128,56 @@ export default function AdminManageSubjects() {
           </Dialog>
         </div>
 
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search subject code or name..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="relative">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-300" />
+          <Input 
+            placeholder="Search subjects by name or course code..." 
+            className="pl-14 bg-white border-zinc-200 rounded-3xl h-14 text-base shadow-sm focus:ring-primary/20 transition-all font-medium"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
-        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-secondary/30">
-                  <th className="px-6 py-4 text-left font-bold text-muted-foreground">Subject Code</th>
-                  <th className="px-6 py-4 text-left font-bold text-muted-foreground">Full Name</th>
-                  <th className="px-6 py-4 text-left font-bold text-muted-foreground">Description</th>
-                  <th className="px-6 py-4 text-right font-bold text-muted-foreground">Management</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-16 text-center">
-                      <div className="flex flex-col items-center gap-2 opacity-30">
-                        <BookOpen className="h-10 w-10 text-muted-foreground" />
-                        <p className="text-muted-foreground font-medium">Database is empty.</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : filtered.map((s) => (
-                  <tr key={s.id} className="hover:bg-secondary/20 transition-all group">
-                    <td className="px-6 py-4 font-mono font-bold text-primary text-base">{s.code}</td>
-                    <td className="px-6 py-4 font-semibold text-foreground">{s.name}</td>
-                    <td className="px-6 py-4 text-muted-foreground max-w-xs truncate italic text-xs">{s.description || 'No description provided.'}</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {loading ? (
+          <div className="py-20 flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-muted-foreground animate-pulse font-medium">Syncing Subject Catalog...</p>
           </div>
-        </div>
-      </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredSubjects.map((subject) => (
+              <motion.div
+                key={subject._id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="group relative bg-white rounded-3xl border border-border p-8 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/5 transition-all text-center flex flex-col items-center"
+              >
+                <div className="bg-zinc-50 h-20 w-20 rounded-full flex items-center justify-center mb-6 group-hover:bg-primary/5 transition-colors border border-zinc-100 group-hover:border-primary/20">
+                    <BookOpen className="h-8 w-8 text-zinc-950 group-hover:text-primary transition-colors" />
+                </div>
+                
+                <h3 className="text-xl font-bold text-zinc-950 mb-1 group-hover:text-primary transition-colors">{subject.name}</h3>
+                <p className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-wider mb-4 inline-block">{subject.code || 'NO-CODE'}</p>
+                <p className="text-sm text-zinc-500 mb-8 line-clamp-2 px-2 italic font-medium">{subject.description || 'No description provided for this subject.'}</p>
+
+                <div className="mt-auto pt-6 border-t border-zinc-100 w-full flex items-center justify-center gap-4">
+                   <Button variant="ghost" size="sm" className="rounded-xl h-10 hover:bg-zinc-50 font-bold transition-all hover:gap-3">
+                     View Details <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                   </Button>
+                </div>
+              </motion.div>
+            ))}
+
+            {filteredSubjects.length === 0 && (
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-zinc-200 rounded-3xl bg-zinc-50/50">
+                <BookOpen className="h-12 w-12 text-zinc-300 mx-auto mb-4" />
+                <p className="text-zinc-500 font-medium">No subjects found matching your search criteria.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </DashboardLayout>
   );
 }

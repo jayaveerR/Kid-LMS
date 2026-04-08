@@ -15,12 +15,22 @@ export default function StudentResultDetail() {
   useEffect(() => {
     const fetchDetail = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/evaluations/${id}`);
-        if (!response.ok) throw new Error('Evaluation not found');
+        const response = await fetch(`${API_BASE_URL}/api/results/${id}`);
+        if (!response.ok) throw new Error('Evaluation result not found');
         const evalData = await response.json();
-        setData(evalData);
+        
+        // Map to internal format if needed
+        const mappedData = {
+            ...evalData,
+            exam_id: evalData.examTitle || 'Final Exam',
+            student_roll: evalData.rollNumber || 'Student',
+            percentage: evalData.total ? ((evalData.score / evalData.total) * 100).toFixed(0) : '0',
+            recorded_at: evalData.timestamp || new Date()
+        };
+        
+        setData(mappedData);
       } catch (err: any) {
-        toast.error(err.message || 'Failed to load details');
+        toast.error(err.message || 'Failed to load evaluation details');
       } finally {
         setLoading(false);
       }

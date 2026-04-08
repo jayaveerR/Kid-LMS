@@ -10,13 +10,14 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/constants';
 
 interface EvaluationResult {
-  id: string;
-  exam: string;
-  date: string;
-  marks: string;
-  pct: string;
+  _id: string;
+  examTitle: string;
+  timestamp: string;
+  score: number;
+  total: number;
+  percentage: string;
   grade: string;
-  student?: string; // Optional addition if I want to show roll number
+  rollNumber?: string;
 }
 
 export default function AdminAllEvaluations() {
@@ -49,9 +50,9 @@ export default function AdminAllEvaluations() {
     }
   });
 
-  const filtered = results.filter(r =>
-    r.exam?.toLowerCase().includes(search.toLowerCase()) ||
-    r.id?.toLowerCase().includes(search.toLowerCase())
+  const filtered = results.filter((r) =>
+    (r.examTitle || '').toLowerCase().includes(search.toLowerCase()) ||
+    (r._id || '').toLowerCase().includes(search.toLowerCase())
   );
 
   if (isLoading) {
@@ -125,25 +126,25 @@ export default function AdminAllEvaluations() {
                   </tr>
                 ) : (
                   filtered.map((r) => (
-                    <tr key={r.id} className="hover:bg-secondary/20 transition-colors">
-                      <td className="px-5 py-4 font-mono text-xs text-muted-foreground">#{r.id.slice(-8)}</td>
-                      <td className="px-5 py-4 font-medium text-foreground">{r.exam}</td>
-                      <td className="px-5 py-4 text-muted-foreground">{r.date}</td>
-                      <td className="px-5 py-4 font-mono text-foreground font-semibold">{r.marks}</td>
+                    <tr key={r._id} className="hover:bg-secondary/20 transition-colors">
+                      <td className="px-5 py-4 font-mono text-xs text-muted-foreground">#{r._id.slice(-8)}</td>
+                      <td className="px-5 py-4 font-medium text-foreground">{r.examTitle}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{new Date(r.timestamp).toLocaleDateString()}</td>
+                      <td className="px-5 py-4 font-mono text-foreground font-semibold">{r.score}/{r.total}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
                             <div 
-                              className="h-full bg-primary" 
-                              style={{ width: r.pct }}
+                               className="h-full bg-primary" 
+                               style={{ width: `${r.percentage}%` }}
                             />
                           </div>
-                          <span className="font-mono text-xs">{r.pct}</span>
+                          <span className="font-mono text-xs">{r.percentage}%</span>
                         </div>
                       </td>
                       <td className="px-5 py-4">
                         <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold ${
-                          r.grade === 'A' ? 'bg-success/10 text-success border border-success/20' : 
+                          r.grade === 'A+' || r.grade === 'A' ? 'bg-success/10 text-success border border-success/20' : 
                           'bg-primary/10 text-primary border border-primary/20'
                         }`}>
                           {r.grade}
@@ -151,7 +152,7 @@ export default function AdminAllEvaluations() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <Link 
-                          to={`/evaluation/${r.id}`} 
+                          to={`/result-detail/${r._id}`} 
                           className="inline-flex items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-all"
                         >
                           <Eye className="h-4 w-4" />

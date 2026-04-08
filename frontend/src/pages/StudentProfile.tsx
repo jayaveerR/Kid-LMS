@@ -1,20 +1,44 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
-import { User, Mail, Shield, Hash, Calendar, Loader2 } from 'lucide-react';
-import { auth } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { User, Mail, Shield, Hash, Calendar, Loader2, Phone, TrendingUp } from 'lucide-react';
+import { API_BASE_URL } from '@/lib/constants';
 
 export default function StudentProfile() {
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ fullName?: string; email?: string; _id?: string; totalExams?: number; avgScore?: number } | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-    return () => unsub();
+    const fetchProfile = async () => {
+        const storedUser = localStorage.getItem('user');
+        if (!storedUser) {
+            setLoading(false);
+            return;
+        }
+        const u = JSON.parse(storedUser);
+        const targetId = u.id || u._id;
+        
+        try {
+            const userRes = await fetch(`${API_BASE_URL}/api/users/${targetId}`);
+            const userData = await userRes.json();
+            
+            // Fetch stats for profile
+            const statsRes = await fetch(`${API_BASE_URL}/api/results?rollNumber=${targetId}`);
+            const statsData = await statsRes.json();
+            
+            setUser({
+              ...userData,
+              totalExams: statsData.length,
+              avgScore: statsData.length > 0 ? Math.round(statsData.reduce((a: number, b: { score: number; total: number }) => a + (b.score/b.total)*100, 0) / statsData.length) : 0
+            });
+        } catch (err) {
+            console.error("Failed to load student profile:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    fetchProfile();
   }, []);
 
   if (loading) {
@@ -28,57 +52,55 @@ export default function StudentProfile() {
   }
 
   const info = [
-    { label: 'Full Name', value: user?.profile?.name || 'User', icon: User },
-    { label: 'Email', value: user?.email, icon: Mail },
-    { label: 'Verified Status', value: user?.emailVerified ? 'Verified' : 'Pending Verification', icon: Shield },
-    { label: 'Joined Date', value: new Date(user?.createdAt).toLocaleDateString(), icon: Calendar },
+    { label: 'Full Name Identity', value: user?.fullName || 'Student', icon: User },
+    { label: 'Registered Email', value: user?.email, icon: Mail },
+    { label: 'Student ID / UUID', value: user?._id || 'Not Assigned', icon: Hash },
+    { label: 'Academic Status', value: 'Active Student', icon: Shield },
+    { label: 'Avg Performance', value: `${user?.avgScore || 0}%`, icon: TrendingUp },
+    { label: 'Total Assessments', value: `${user?.totalExams || 0} Finished`, icon: Calendar },
   ];
 
   return (
     <DashboardLayout>
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-2xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Student Profile</h1>
-          <p className="text-sm text-muted-foreground">Your account information</p>
+      <div className="max-w-4xl mx-auto space-y-8 pb-10">
+        <div className="bg-white p-10 rounded-[2.5rem] border border-border shadow-sm flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+           <div className="h-24 w-24 rounded-3xl bg-zinc-950 flex items-center justify-center text-3xl font-black text-white shadow-xl shadow-zinc-900/20 relative z-10 uppercase">
+              {user?.fullName?.charAt(0) || 'S'}
+           </div>
+           <div className="text-center md:text-left relative z-10">
+              <h1 className="text-3xl font-black tracking-tight text-zinc-950">{user?.fullName || 'Student'}</h1>
+              <p className="text-blue-600 font-bold text-xs uppercase tracking-widest mt-1 bg-blue-50 px-3 py-1 rounded-full inline-block">Official Student Account</p>
+           </div>
+           
+           <div className="absolute top-0 right-0 w-64 h-64 bg-zinc-50 rounded-full blur-3xl -translate-y-20 translate-x-20" />
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-          {/* Avatar section */}
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-              <User className="h-10 w-10 text-primary" />
+        <motion.div 
+            initial={{ opacity: 0, y: 15 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        >
+          {info.map((item, idx) => (
+            <div key={idx} className="bg-white border border-border p-6 rounded-[2rem] flex items-center gap-5 hover:border-primary/40 transition-all group">
+               <div className="h-12 w-12 rounded-2xl bg-zinc-50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                  <item.icon className="h-5 w-5 text-zinc-400 group-hover:text-primary transition-colors" />
+               </div>
+               <div>
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">{item.label}</p>
+                  <p className="text-sm font-bold text-zinc-950">{item.value}</p>
+               </div>
             </div>
-            <div>
-              <p className="text-lg font-semibold text-foreground">{user?.profile?.name || 'User'}</p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="h-3.5 w-3.5" />
-                {user?.email}
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Shield className="h-3.5 w-3.5" />
-                Student
-              </div>
-            </div>
-          </div>
-
-          {/* Account info */}
-          <div>
-            <h2 className="font-semibold text-foreground mb-4">Account Info</h2>
-            <div className="space-y-3">
-              {info.map((item) => (
-                <div key={item.label} className="flex items-center gap-3 rounded-lg bg-secondary p-3.5">
-                  <item.icon className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">{item.label}</p>
-                    <p className="text-sm font-medium text-foreground">{item.value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          ))}
+        </motion.div>
+        
+        <div className="bg-zinc-950 p-8 rounded-[2.5rem] text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl shadow-blue-500/10 border border-white/5">
+           <div>
+              <h3 className="text-xl font-bold">Need to update your details?</h3>
+              <p className="text-zinc-400 text-sm mt-1">Please contact the administrator or your instructor for profile major modifications.</p>
+           </div>
+           <button className="bg-white text-zinc-950 px-8 py-3 rounded-2xl font-bold hover:bg-zinc-200 transition-all">Support Desk</button>
         </div>
-      </motion.div>
+      </div>
     </DashboardLayout>
   );
 }
-

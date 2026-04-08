@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,9 +25,10 @@ interface StudentDetails {
 
 interface EvaluationDetail {
   question_num: number;
+  instructor_question: string;
+  instructor_answer: string;
   student_question: string;
   student_answer: string;
-  instructor_answer: string;
   evaluation_feedback: string;
   score: number;
   semantic_match_percentage: number;
@@ -42,6 +44,7 @@ interface EvaluationResult {
 }
 
 export default function UploadPapers() {
+  const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -49,7 +52,7 @@ export default function UploadPapers() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExam, setSelectedExam] = useState('');
   const [rollNumber, setRollNumber] = useState('');
-  const [extractedData, setExtractedData] = useState<any[] | null>(null);
+  const [extractedData, setExtractedData] = useState<EvaluationDetail[] | null>(null);
   const [showJson, setShowJson] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [result, setResult] = useState<EvaluationResult | null>(null);
@@ -83,9 +86,10 @@ export default function UploadPapers() {
       if (!response.ok) throw new Error(data.error || 'Student not found');
       setStudentDetails(data);
       toast.success(`Student found: ${data.fullName}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error;
       setStudentDetails(null);
-      toast.error(err.message || 'Lookup failed');
+      toast.error(error.message || 'Lookup failed');
     } finally {
       setSearchingStudent(false);
     }
@@ -123,8 +127,9 @@ export default function UploadPapers() {
       
       setExtractedData(data.extracted_data);
       toast.success('Document text extracted successfully!');
-    } catch (err: any) {
-      toast.error(err.message || 'Extraction failed.');
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || 'Extraction failed.');
     } finally {
       setLoading(false);
       setLoadingStep(0);
@@ -150,8 +155,9 @@ export default function UploadPapers() {
       
       setResult(data);
       toast.success('AI Semantic Evaluation Complete!');
-    } catch (err: any) {
-      toast.error(err.message || 'Evaluation failed.');
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || 'Evaluation failed.');
     } finally {
       setEvaluating(false);
     }
@@ -174,9 +180,10 @@ export default function UploadPapers() {
       if (!response.ok) throw new Error(data.error || 'Failed to record results');
 
       toast.success('Marks recorded successfully for ' + studentDetails.fullName);
-      // Optional: Navigate or reset
-    } catch (err: any) {
-      toast.error(err.message || 'Saving failed');
+      setTimeout(() => navigate('/all-evaluations'), 1500);
+    } catch (err: unknown) {
+      const error = err as Error;
+      toast.error(error.message || 'Saving failed');
     } finally {
       setRecording(false);
     }
@@ -294,8 +301,28 @@ export default function UploadPapers() {
                       </div>
 
                       <div className="p-6 grid gap-6 md:grid-cols-2 bg-gradient-to-br from-background to-secondary/10">
-                        {/* Comparison */}
-                        <div className="space-y-3">
+                        {/* Instructor Model Data */}
+                        <div className="space-y-4">
+                          <div className="space-y-1.5">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary/70 italic">
+                              Instructor Model Question
+                            </span>
+                            <p className="p-4 rounded-xl bg-primary/5 border border-primary/20 text-sm text-foreground font-bold">
+                              {d.instructor_question}
+                            </p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary/70 italic">
+                              Instructor Model Answer Key
+                            </span>
+                            <p className="p-4 rounded-xl bg-primary/5 border border-primary/20 text-sm text-foreground font-mono italic">
+                              {d.instructor_answer}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Student Extracted Data */}
+                        <div className="space-y-4">
                           <div className="space-y-1.5">
                             <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                               Student Extracted Question
@@ -304,28 +331,13 @@ export default function UploadPapers() {
                               {d.student_question}
                             </p>
                           </div>
-                          <div className="space-y-1.5 text-xs">
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary">
+                          <div className="space-y-1.5">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                               Student Extracted Answer
                             </span>
-                            <p className="p-4 rounded-xl bg-primary/5 border border-primary/20 text-foreground font-medium">
+                            <p className="p-4 rounded-xl bg-background border border-border text-sm text-foreground font-medium">
                               {d.student_answer}
                             </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="space-y-1.5">
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground italic">
-                              Instructor Model Answer Key
-                            </span>
-                            <p className="p-4 rounded-xl bg-background border border-border text-sm text-foreground font-mono">
-                              {d.instructor_answer}
-                            </p>
-                          </div>
-                          <div className="px-5 py-4 bg-primary/5 rounded-xl border border-primary/20">
-                            <p className="text-[10px] font-bold text-primary uppercase mb-1">AI Feedback</p>
-                            <p className="text-xs font-medium text-foreground italic">"{d.evaluation_feedback}"</p>
                           </div>
                         </div>
                       </div>

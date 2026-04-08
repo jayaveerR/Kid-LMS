@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, FileText, Loader2, Save, Trash2, CheckCircle2 } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, FileText, Loader2, Save, Trash2, CheckCircle2, Edit } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/constants';
 import {
@@ -42,6 +42,10 @@ interface EvaluationDetail {
 
 export default function AdminModelAnswers() {
   const [selectedExamId, setSelectedExamId] = useState<string>('');
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -52,34 +56,37 @@ export default function AdminModelAnswers() {
     maxMarks: 10
   });
 
-  // Fetch all exams for the dropdown
-  const { data: exams = [] as Exam[], isPending: examsLoading } = useQuery({
-    queryKey: ['exams'],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE_URL}/api/exams`);
-      if (!res.ok) throw new Error('Failed to fetch exams');
-      const data = await res.json();
-      return data as Exam[];
-    }
-  });
-
-  // Handle initial selection via useEffect side-effect (Clean React Pattern)
+  // 1. Fetch exams on component mount (as requested)
   useEffect(() => {
-    if (exams.length > 0 && !selectedExamId) {
-      setSelectedExamId(String(exams[0].id));
-    }
-  }, [exams, selectedExamId]);
+    setLoading(true);
+    fetch(`${API_BASE_URL}/api/exams`)
+      .then(res => res.json())
+      .then(data => {
+        setExams(data);
+        if (data.length > 0 && !selectedExamId) {
+          setSelectedExamId(data[0].id);
+        }
+      })
+      .catch(err => setError('Failed to load exams: ' + err.message))
+      .finally(() => setLoading(false));
+  }, [selectedExamId]);
 
-  // Fetch questions for the selected exam
-  const { data: questions = [], isLoading: questionsLoading } = useQuery({
-    queryKey: ['questions', selectedExamId],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE_URL}/api/exams/${selectedExamId}/questions`);
-      if (!res.ok) throw new Error('Failed to fetch questions');
-      return res.json() as Promise<Question[]>;
-    },
-    enabled: !!selectedExamId
-  });
+  // 2. Fetch model answers (questions) when selectedExamId changes (as requested)
+  useEffect(() => {
+    if (!selectedExamId) return;
+    setLoading(true);
+    fetch(`${API_BASE_URL}/api/model-answers?examId=${selectedExamId}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch model answers');
+        return res.json();
+      })
+      .then(data => {
+        setQuestions(data);
+        setError(null);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [selectedExamId]);
 
   const createMutation = useMutation({
     mutationFn: async (q: Omit<Question, 'id'>) => {
@@ -121,13 +128,46 @@ export default function AdminModelAnswers() {
     }
   });
 
+
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+
+  const editMutation = useMutation({
+    mutationFn: async (q: Question) => {
+      const res = await fetch(`${API_BASE_URL}/api/exams/${selectedExamId}/questions/${q.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(q)
+      });
+      if (!res.ok) throw new Error('Failed to update question');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['questions', selectedExamId] });
+      toast.success('Question updated successfully');
+      setEditingQuestion(null);
+    },
+    onError: (err) => {
+      toast.error('Error updating question');
+      console.error(err);
+    }
+  });
+
   const handleAddQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedExamId) {
       toast.error('Please select an exam first');
       return;
     }
-    createMutation.mutate(newQuestion);
+    if (editingQuestion) {
+      editMutation.mutate(editingQuestion);
+    } else {
+      createMutation.mutate(newQuestion);
+    }
+  };
+
+  const handleEditClick = (q: Question) => {
+    setEditingQuestion(q);
+    setIsDialogOpen(true);
   };
 
   const handleDelete = (id: string) => {
@@ -154,20 +194,31 @@ export default function AdminModelAnswers() {
         return;
       }
 
-      // For each question/answer, create a model answer
-      data.qa.forEach((item: { question: string; answer: string }, idx: number) => {
-        if (item.question && item.answer) {
-          createMutation.mutate({
-            q: (questions?.length || 0) + idx + 1,
-            question: item.question,
-            modelAnswer: item.answer,
-            maxMarks: 10
-          });
-        }
+      // Use the newly created bulk endpoint!
+      const questionsToUpload = data.qa.map((item: { question: string; answer: string }, idx: number) => ({
+        q: (questions?.length || 0) + idx + 1,
+        question: item.question,
+        modelAnswer: item.answer,
+        maxMarks: 10
+      }));
+
+      const res = await fetch(`${API_BASE_URL}/api/exams/${selectedExamId}/questions/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions: questionsToUpload })
       });
-      toast.success('Bulk model answers uploaded!');
+
+      if (!res.ok) throw new Error('Bulk upload failed');
+      
+      queryClient.invalidateQueries({ queryKey: ['questions', selectedExamId] });
+      toast.success(`${questionsToUpload.length} model answers distributed successfully!`);
+      // Refresh local list
+      fetch(`${API_BASE_URL}/api/model-answers?examId=${selectedExamId}`)
+        .then(res => res.json())
+        .then(data => setQuestions(data));
+
     } catch (err) {
-      toast.error('Failed to parse JSON');
+      toast.error('Failed to distribute questions from JSON');
       console.error(err);
     }
   };
@@ -264,18 +315,6 @@ export default function AdminModelAnswers() {
           </div>
           
           <div className="flex gap-2">
-            <input 
-              type="file" 
-              className="hidden" 
-              ref={fileInputRef} 
-              onChange={handleKeyUpload} 
-              accept=".pdf,.jpg,.jpeg,.png"
-            />
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={!selectedExamId}>
-              <FileText className="mr-2 h-4 w-4" />
-              Upload Key Paper
-            </Button>
-        
             {/* JSON Upload for Bulk Q/A */}
             <input
               type="file"
@@ -289,30 +328,21 @@ export default function AdminModelAnswers() {
               Upload Q/A JSON
             </Button>
             
-            {/* Evaluation JSON Upload */}
-            <input
-              type="file"
-              className="hidden"
-              id="eval-json-upload"
-              onChange={handleTestEvaluationJson}
-              accept="application/json"
-            />
-            <Button className="bg-primary hover:bg-primary/90 text-white" onClick={() => document.getElementById('eval-json-upload')?.click()} disabled={!selectedExamId}>
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Evaluate JSON Paper
-            </Button>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => {
+              setIsDialogOpen(open);
+              if (!open) setEditingQuestion(null);
+            }}>
               <DialogTrigger asChild>
-                <Button disabled={!selectedExamId}>
+                <Button disabled={!selectedExamId} onClick={() => setEditingQuestion(null)}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add Question
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                  <DialogTitle>Add Model Answer</DialogTitle>
+                  <DialogTitle>{editingQuestion ? 'Edit Model Answer' : 'Add Model Answer'}</DialogTitle>
                   <DialogDescription>
-                    Enter the question text and the expected correct answer.
+                    {editingQuestion ? 'Update the question text or expected correct answer.' : 'Enter the question text and the expected correct answer.'}
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleAddQuestion} className="grid gap-4 py-4">
@@ -324,8 +354,12 @@ export default function AdminModelAnswers() {
                       title="Question Number"
                       placeholder="No"
                       className="col-span-1" 
-                      value={newQuestion.q} 
-                      onChange={e => setNewQuestion({...newQuestion, q: parseInt(e.target.value)})}
+                      value={editingQuestion ? editingQuestion.q : newQuestion.q} 
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        if (editingQuestion) setEditingQuestion({...editingQuestion, q: val});
+                        else setNewQuestion({...newQuestion, q: val});
+                      }}
                     />
                     <Label htmlFor="marks" className="text-right">Marks</Label>
                     <Input 
@@ -334,8 +368,12 @@ export default function AdminModelAnswers() {
                       title="Maximum Marks"
                       placeholder="Marks"
                       className="col-span-1" 
-                      value={newQuestion.maxMarks} 
-                      onChange={e => setNewQuestion({...newQuestion, maxMarks: parseInt(e.target.value)})}
+                      value={editingQuestion ? editingQuestion.maxMarks : newQuestion.maxMarks} 
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        if (editingQuestion) setEditingQuestion({...editingQuestion, maxMarks: val});
+                        else setNewQuestion({...newQuestion, maxMarks: val});
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
@@ -343,8 +381,11 @@ export default function AdminModelAnswers() {
                     <Textarea 
                       id="question" 
                       placeholder="Enter the exam question here..." 
-                      value={newQuestion.question} 
-                      onChange={e => setNewQuestion({...newQuestion, question: e.target.value})}
+                      value={editingQuestion ? editingQuestion.question : newQuestion.question} 
+                      onChange={e => {
+                         if (editingQuestion) setEditingQuestion({...editingQuestion, question: e.target.value});
+                         else setNewQuestion({...newQuestion, question: e.target.value});
+                      }}
                       required
                     />
                   </div>
@@ -353,16 +394,19 @@ export default function AdminModelAnswers() {
                     <Textarea 
                       id="answer" 
                       placeholder="Enter the ideal answer that students should provide..." 
-                      value={newQuestion.modelAnswer} 
-                      onChange={e => setNewQuestion({...newQuestion, modelAnswer: e.target.value})}
+                      value={editingQuestion ? editingQuestion.modelAnswer : newQuestion.modelAnswer} 
+                      onChange={e => {
+                        if (editingQuestion) setEditingQuestion({...editingQuestion, modelAnswer: e.target.value});
+                        else setNewQuestion({...newQuestion, modelAnswer: e.target.value});
+                      }}
                       required
                       className="h-32"
                     />
                   </div>
                   <DialogFooter>
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Question
+                    <Button type="submit" disabled={createMutation.isPending || editMutation.isPending}>
+                      {(createMutation.isPending || editMutation.isPending) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      {editingQuestion ? 'Update Question' : 'Save Question'}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -375,21 +419,30 @@ export default function AdminModelAnswers() {
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-foreground">Select Exam:</span>
             <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-              <SelectTrigger className="w-[300px] bg-background">
-                <SelectValue placeholder={examsLoading ? "Loading exams..." : "Choose an examination"} />
+              <SelectTrigger className="w-[300px] bg-background border-primary/20">
+                <SelectValue placeholder={loading ? "Loading exams..." : "Choose an examination"} />
               </SelectTrigger>
               <SelectContent>
                 {exams.map((e: Exam) => (
                   <SelectItem key={e.id} value={String(e.id)}>{e.title} ({e.subject})</SelectItem>
                 ))}
+                {exams.length === 0 && !loading && <p className="p-2 text-xs text-muted-foreground text-center">No exams found in database.</p>}
               </SelectContent>
             </Select>
           </div>
-          {examsLoading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
         </div>
 
         <div className="space-y-4">
-          {questionsLoading ? (
+          {error && (
+            <div className="p-10 rounded-2xl border-2 border-destructive/20 bg-destructive/5 text-center text-destructive">
+              <p className="font-bold underline uppercase tracking-widest text-xs mb-2">Error Occurred</p>
+              <p className="text-sm font-medium">{error}</p>
+              <Button variant="outline" className="mt-4 border-destructive/20 text-destructive hover:bg-destructive/10" onClick={() => window.location.reload()}>Retry Sync</Button>
+            </div>
+          )}
+
+          {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
               <p className="text-sm text-muted-foreground animate-pulse">Syncing Answer Key...</p>
@@ -399,10 +452,10 @@ export default function AdminModelAnswers() {
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
               <p className="text-muted-foreground">Select an exam to view and manage its answer key.</p>
             </div>
-          ) : questions.length === 0 ? (
+          ) : questions.length === 0 && !error ? (
             <div className="rounded-2xl border-2 border-dashed border-border p-20 text-center">
               <CheckCircle2 className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
-              <p className="text-muted-foreground font-medium text-lg">No questions added yet.</p>
+              <p className="text-muted-foreground font-medium text-lg">No Model Answers Found</p>
               <p className="text-sm text-muted-foreground mt-2">Click the "Add Question" button above to start building the Answer Key.</p>
             </div>
           ) : (
@@ -425,6 +478,14 @@ export default function AdminModelAnswers() {
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                        onClick={() => handleEditClick(q)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                       <Button 
                         variant="ghost" 
                         size="icon" 

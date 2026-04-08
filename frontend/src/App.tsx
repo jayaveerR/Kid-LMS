@@ -52,6 +52,7 @@ const App = () => (
           {/* Student routes */}
           <Route path="/student-dashboard" element={<StudentDashboard />} />
           <Route path="/my-results" element={<StudentMyResults />} />
+          <Route path="/view-results/:rollNumber" element={<StudentMyResults />} />
           <Route path="/result-detail/:id" element={<StudentResultDetail />} />
           <Route path="/student-profile" element={<StudentProfile />} />
           <Route path="*" element={<NotFound />} />

@@ -6,8 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Plus, Search, Calendar, Clock, FileText, Eye, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '@/lib/constants';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +18,7 @@ import {
 import { Label } from '@/components/ui/label';
 
 interface Exam {
-  id: string;
+  _id: string;
   title: string;
   subject: string;
   date: string;
@@ -45,140 +43,105 @@ export default function AdminManageExams() {
     status: 'Upcoming'
   });
 
-  // Real-time synchronization with Firestore "exams" collection
-  useEffect(() => {
-    const q = query(collection(db, 'exams'), orderBy('date', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const examsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Exam[];
-      setExams(examsData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Firestore Listen Error:", error);
-      toast.error("Failed to load real-time exam data");
-      setLoading(false);
-    });
+  const fetchExams = async () => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/exams`);
+        const data = await response.json();
+        setExams(data);
+    } catch (err) {
+        toast.error("Failed to load exams");
+    } finally {
+        setLoading(false);
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchExams();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSaveExam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newExam.title || !newExam.subject || !newExam.date) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/exams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newExam)
+        body: JSON.stringify({
+          ...newExam,
+          date: new Date(newExam.date).toISOString()
+        })
       });
 
-      if (!response.ok) throw new Error('Failed to create exam');
-      
-      toast.success('Exam successfully created and stored in Firestore');
+      if (!response.ok) throw new Error('Failed to save exam');
+
+      toast.success('Examination created successfully in MongoDB Atlas');
       setIsDialogOpen(false);
       setNewExam({ title: '', subject: '', date: '', duration: '', questions: 10, status: 'Upcoming' });
-    } catch (err) {
-      toast.error('Error saving exam to backend');
-      console.error(err);
+      fetchExams(); // Refresh list
+
+    } catch (error) {
+      toast.error('Failed to create examination');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const filtered = exams.filter(e =>
-    e.title?.toLowerCase().includes(search.toLowerCase()) ||
-    e.subject?.toLowerCase().includes(search.toLowerCase())
+  const filteredExams = exams.filter(e => 
+    e.title.toLowerCase().includes(search.toLowerCase()) || 
+    e.subject.toLowerCase().includes(search.toLowerCase())
   );
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-[60vh] items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground animate-pulse">Syncing with Exam Database...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout>
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="space-y-8 pb-10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-8 rounded-3xl border border-border shadow-sm">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Manage Exams</h1>
-            <p className="text-sm text-muted-foreground">Real-time examination management portal</p>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-950">Examination Management</h1>
+            <p className="text-muted-foreground mt-1 text-sm font-medium">Create, schedule and oversee assessment papers.</p>
           </div>
           
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
-                <Plus className="mr-2 h-4 w-4" />
-                Create New Exam
+              <Button className="bg-zinc-950 hover:bg-zinc-800 text-white rounded-2xl h-12 px-6 shadow-lg shadow-zinc-950/10">
+                <Plus className="mr-2 h-4.5 w-4.5" /> Schedule New Exam
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="max-w-md rounded-3xl">
               <DialogHeader>
-                <DialogTitle>Create New Exam</DialogTitle>
-                <DialogDescription>
-                  This exam will be stored in the Firebase Firestore collection.
-                </DialogDescription>
+                <DialogTitle className="text-2xl font-bold">New Examination</DialogTitle>
+                <DialogDescription>Define the core details of the assessment paper.</DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleCreate} className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Exam Title</Label>
-                  <Input 
-                    id="title" 
-                    placeholder="e.g. Unit Test - Calculus" 
-                    value={newExam.title} 
-                    onChange={e => setNewExam({...newExam, title: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subject">Subject</Label>
-                  <Input 
-                    id="subject" 
-                    placeholder="e.g. Mathematics" 
-                    value={newExam.subject} 
-                    onChange={e => setNewExam({...newExam, subject: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleSaveExam} className="space-y-5 py-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="date">Date</Label>
-                    <Input 
-                      id="date" 
-                      type="date" 
-                      value={newExam.date} 
-                      onChange={e => setNewExam({...newExam, date: e.target.value})}
-                      required
-                    />
+                    <Label htmlFor="title">Exam Title</Label>
+                    <Input id="title" value={newExam.title} onChange={e => setNewExam({...newExam, title: e.target.value})} placeholder="Final Assessment 2024" required className="rounded-xl h-11" />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="duration">Duration</Label>
-                    <Input 
-                      id="duration" 
-                      placeholder="e.g. 2h 30m" 
-                      value={newExam.duration} 
-                      onChange={e => setNewExam({...newExam, duration: e.target.value})}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="subject">Subject</Label>
+                      <Input id="subject" value={newExam.subject} onChange={e => setNewExam({...newExam, subject: e.target.value})} placeholder="Mathematics" required className="rounded-xl h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="date">Scheduled Date</Label>
+                      <Input id="date" type="date" value={newExam.date} onChange={e => setNewExam({...newExam, date: e.target.value})} required className="rounded-xl h-11" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="duration">Duration (mins)</Label>
+                      <Input id="duration" type="number" value={newExam.duration} onChange={e => setNewExam({...newExam, duration: e.target.value})} placeholder="120" required className="rounded-xl h-11" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="questions">Questions Count</Label>
+                      <Input id="questions" type="number" value={newExam.questions} onChange={e => setNewExam({...newExam, questions: parseInt(e.target.value)})} placeholder="10" required className="rounded-xl h-11" />
+                    </div>
                   </div>
                 </div>
-                <DialogFooter className="mt-4">
-                  <Button type="submit" className="w-full" disabled={isSaving}>
-                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Save to Firestore
+                <DialogFooter className="pt-4 gap-3 flex-col sm:flex-row">
+                  <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl h-11 order-2 sm:order-1">Cancel</Button>
+                  <Button type="submit" disabled={isSaving} className="bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl h-11 order-1 sm:order-2">
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />} Save Exam
                   </Button>
                 </DialogFooter>
               </form>
@@ -186,61 +149,71 @@ export default function AdminManageExams() {
           </Dialog>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search examinations..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+          <Input 
+            placeholder="Search examinations by title or subject..." 
+            className="pl-12 bg-white border-border rounded-3xl h-14 text-base shadow-sm focus:ring-primary/20 transition-all font-medium"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <div className="py-20 flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            <p className="text-muted-foreground animate-pulse font-medium">Syncing Examinations...</p>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredExams.map((exam) => (
+              <motion.div
+                key={exam._id}
+                layout
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="group relative bg-white rounded-3xl border border-border p-6 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/5 transition-all"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="bg-zinc-950 p-2.5 rounded-2xl">
+                    <FileText className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {exam.status || 'Active'}
+                  </div>
+                </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.length === 0 ? (
-            <div className="col-span-full py-20 text-center border-2 border-dashed border-border rounded-2xl bg-secondary/10">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-20" />
-              <p className="text-muted-foreground font-medium">No examinations found in database.</p>
-              <p className="text-xs text-muted-foreground mt-1">Start by creating a new exam record.</p>
-            </div>
-          ) : filtered.map((exam) => (
-            <motion.div 
-              layout
-              key={exam.id} 
-              className="group relative rounded-xl border border-border bg-card p-5 space-y-4 hover:border-primary/50 transition-all hover:shadow-xl hover:shadow-primary/5"
-            >
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <h3 className="font-bold text-foreground text-lg leading-tight group-hover:text-primary transition-colors">{exam.title}</h3>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{exam.subject}</p>
-                </div>
-                <div className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-tighter ${
-                  exam.status === 'Active' ? 'bg-success/20 text-success' :
-                  exam.status === 'Completed' ? 'bg-primary/20 text-primary' :
-                  'bg-warning/20 text-warning'
-                }`}>
-                  {exam.status}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 py-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5 text-primary/60" />
-                  <span>{exam.date}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5 text-primary/60" />
-                  <span>{exam.duration || 'N/A'}</span>
-                </div>
-              </div>
+                <h3 className="text-lg font-bold text-zinc-950 group-hover:text-primary transition-colors">{exam.title}</h3>
+                <p className="text-sm text-zinc-500 mt-1">{exam.subject}</p>
 
-              <div className="pt-2 border-t border-border/50">
-                <Button variant="ghost" size="sm" className="w-full text-xs hover:bg-primary/10 hover:text-primary">
-                  <Eye className="mr-2 h-3 w-3" />
-                  View Model Answers
-                </Button>
+                <div className="mt-6 flex items-center justify-between pt-6 border-t border-zinc-100">
+                   <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-zinc-600 font-medium">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span className="text-xs">{new Date(exam.date).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-zinc-400">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span className="text-xs">{exam.duration} mins</span>
+                      </div>
+                   </div>
+                   <Button variant="ghost" size="sm" className="rounded-xl h-9 hover:bg-zinc-50 font-bold" onClick={() => window.location.href=`/model-answers?examId=${exam._id}`}>
+                     <Eye className="mr-2 h-3.5 w-3.5" /> View Key
+                   </Button>
+                </div>
+              </motion.div>
+            ))}
+
+            {filteredExams.length === 0 && (
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-zinc-200 rounded-3xl bg-zinc-50/50">
+                <FileText className="h-12 w-12 text-zinc-300 mx-auto mb-4" />
+                <p className="text-zinc-500 font-medium tracking-tight">No examinations matching your search.</p>
               </div>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
+            )}
+          </div>
+        )}
+      </div>
     </DashboardLayout>
   );
 }
